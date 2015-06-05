@@ -6,6 +6,23 @@ function init(cb) {
     });
 }
 exports.init = init;
+function debug_run_command(aCommand, aCb) {
+    console.log('debug_run_command: ' + aCommand);
+    serial_commander.run_command(aCommand, function (line) {
+        console.log('O: ' + line);
+    }, function (errLine) {
+        console.log('E: ' + errLine);
+    }, function (exitCode) {
+        console.log('F: ' + exitCode);
+        aCb(exitCode);
+    });
+}
+exports.debug_run_command = debug_run_command;
+/**
+ *
+ * @param aPath
+ * @param aCb
+ */
 function list(aPath, aCb) {
     var re_dir = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
     var re_file = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
@@ -54,14 +71,93 @@ function list(aPath, aCb) {
                 time: time
             });
         }
+    }, function (errLine) {
+        console.log(errLine);
     }, function (err) {
         aCb(err, file_info_list);
     });
 }
 exports.list = list;
-function install_apk(path) {
-    serial_commander.run_command('ll', function (line) {
+function pm_list_features(aCb) {
+    var re = /feature:(.*)/;
+    var result = [];
+    serial_commander.run_command('pm list features', function (line) {
+        var match = re.exec(line);
+        if (match) {
+            result.push(match[1]);
+        }
+    }, function (errLine) {
+        console.error(errLine);
+    }, function (exitCode) {
+        aCb(exitCode, result);
+    });
+}
+exports.pm_list_features = pm_list_features;
+function pm_list_packages(aCb) {
+    var re = /package:(.*)=(.*)/;
+    var result = [];
+    serial_commander.run_command('pm list packages', function (line) {
+        var match = re.exec(line);
+        if (match) {
+            result.push({
+                apk_path: match[1],
+                package_name: match[2]
+            });
+        }
+    }, function (errLine) {
+        console.error(errLine);
+    }, function (exitCode) {
+        aCb(exitCode, result);
+    });
+}
+exports.pm_list_packages = pm_list_packages;
+function pm_list_instrumentation(aCb) {
+    var re = /instrumentation:(.*)\/(.*) \(target=(.*)/;
+    var result = [];
+    serial_commander.run_command('pm list instrumentation', function (line) {
+        var match = re.exec(line);
+        if (match) {
+            result.push({
+                package_name: match[1],
+                runner: match[2],
+                target: match[3]
+            });
+        }
+    }, function (errLine) {
+        console.log(errLine);
+    }, function (exitCode) {
+        aCb(exitCode, result);
+    });
+}
+exports.pm_list_instrumentation = pm_list_instrumentation;
+function install_apk(aPath, aCb) {
+    serial_commander.run_command('pm install ' + aPath, function (line) {
+    }, function (errLine) {
+        console.log(errLine);
+    }, function (exitCode) {
+        aCb(exitCode);
     });
 }
 exports.install_apk = install_apk;
+function run_test(aPackageName, aRunner, aCb) {
+    serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function (line) {
+        console.log(line);
+    }, function (errLine) {
+        console.log(errLine);
+    }, function (exitCode) {
+        aCb(exitCode);
+    });
+}
+exports.run_test = run_test;
+function template(aPath, aCb) {
+    serial_commander.run_command('ll ' + aPath, function (line) {
+        console.log(line);
+    }, function (errLine) {
+        console.log(errLine);
+    }, function (exitCode) {
+        console.log('finished: ', exitCode);
+        aCb(exitCode);
+    });
+}
+exports.template = template;
 //# sourceMappingURL=index.js.map
