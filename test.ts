@@ -53,8 +53,9 @@ async.series<any>([
             function(event) {
                 console.log(event);
             },
-            function(err) {
+            function(err, doc) {
                 console.log('RESULT: ' + err);
+                console.log(doc.toString());
                 done(null, null);
             }
         );

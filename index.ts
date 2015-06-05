@@ -2,6 +2,7 @@
 /// <reference path='typings/tsd.d.ts' />
 
 var serial_commander = require('serial_commander');
+import libxmljs = require('libxmljs');
 
 export function init(cb) {
     serial_commander.init('/dev/ttyS0', function() {
@@ -189,7 +190,7 @@ export interface TTestEvent {
 }
 
 // ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
-export function run_test(aPackageName: string, aRunner: string, aEventCb: (event: TTestEvent) => void, aCb: (err: any) => void) {
+export function run_test(aPackageName: string, aRunner: string, aEventCb: (event: TTestEvent) => void, aCb: (err: any, junit_xml: libxmljs.XMLDocument) => void) {
 
     var re_status = /INSTRUMENTATION_STATUS: (.*)=(.*)/;
     var parser_map = {
@@ -204,6 +205,11 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
 
     var event: any = {};
 
+    var doc = new libxmljs.Document(1, 'utf-8');
+    var elTestSuit = doc.node('testsuits', null).node('testsuite', null);
+
+    // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
+    // am instrument -e reportFile my-report.xml -r -w
     serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function(line) {
 
         //console.log(line);
@@ -216,8 +222,16 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
         } else {
             var match_code = re_code.exec(line);
             if (match_code) {
-                event['type'] = parseInt(match_code[1], 10);
+                var code = parseInt(match_code[1], 10);
+                event['type'] = code;
                 aEventCb(event);
+                if (code !== -1) {
+                    var elTestCase = elTestSuit.node('testcase');
+                    elTestCase.attr({
+                        'classname': event['class'],
+                        'name': event['test'],
+                    });
+                }
                 event = {};
             }
         }
@@ -225,7 +239,7 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
     }, function(errLine) {
         console.log('ERR: ' + errLine);
     }, function(exitCode) {
-        aCb(exitCode);
+        aCb(exitCode, doc);
     });
 }
 

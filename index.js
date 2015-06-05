@@ -1,5 +1,6 @@
 /// <reference path='typings/tsd.d.ts' />
 var serial_commander = require('serial_commander');
+var libxmljs = require('libxmljs');
 function init(cb) {
     serial_commander.init('/dev/ttyS0', function () {
         cb();
@@ -160,6 +161,10 @@ function run_test(aPackageName, aRunner, aEventCb, aCb) {
     };
     var re_code = /INSTRUMENTATION_STATUS_CODE: (.*)/;
     var event = {};
+    var doc = new libxmljs.Document(1, 'utf-8');
+    var elTestSuit = doc.node('testsuits', null).node('testsuite', null);
+    // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
+    // am instrument -e reportFile my-report.xml -r -w
     serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function (line) {
         //console.log(line);
         var match_status = re_status.exec(line);
@@ -171,15 +176,23 @@ function run_test(aPackageName, aRunner, aEventCb, aCb) {
         else {
             var match_code = re_code.exec(line);
             if (match_code) {
-                event['type'] = parseInt(match_code[1], 10);
+                var code = parseInt(match_code[1], 10);
+                event['type'] = code;
                 aEventCb(event);
+                if (code !== -1) {
+                    var elTestCase = elTestSuit.node('testcase');
+                    elTestCase.attr({
+                        'classname': event['class'],
+                        'name': event['test']
+                    });
+                }
                 event = {};
             }
         }
     }, function (errLine) {
         console.log('ERR: ' + errLine);
     }, function (exitCode) {
-        aCb(exitCode);
+        aCb(exitCode, doc);
     });
 }
 exports.run_test = run_test;

@@ -47,8 +47,9 @@ async.series([
         console.log('TEST: run test');
         api.run_test('com.android.cts.bluetooth', 'android.test.InstrumentationCtsTestRunner', function (event) {
             console.log(event);
-        }, function (err) {
+        }, function (err, doc) {
             console.log('RESULT: ' + err);
+            console.log(doc.toString());
             done(null, null);
         });
     }
