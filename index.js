@@ -1,3 +1,4 @@
+/// <reference path='typings/tsd.d.ts' />
 var serial_commander = require('serial_commander');
 function init(cb) {
     serial_commander.init('/dev/ttyS0', function () {
@@ -5,11 +6,6 @@ function init(cb) {
     });
 }
 exports.init = init;
-function install_apk(path) {
-    serial_commander.run_command('ll', function (line) {
-    });
-}
-exports.install_apk = install_apk;
 function list(aPath, aCb) {
     var re_dir = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
     var re_file = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
@@ -63,4 +59,9 @@ function list(aPath, aCb) {
     });
 }
 exports.list = list;
+function install_apk(path) {
+    serial_commander.run_command('ll', function (line) {
+    });
+}
+exports.install_apk = install_apk;
 //# sourceMappingURL=index.js.map

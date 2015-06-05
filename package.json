@@ -1,5 +1,5 @@
 {
-  "name": "adb_tester",
+  "name": "serial_utils",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "async": "^1.1.0",
     "serial_commander": "git+https://git@github.com/swcho/serial_commander.git"
   }
 }
