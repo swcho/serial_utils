@@ -1,6 +1,6 @@
 # serial_utils
 
-node js based utilities for sending command and return parsed result.
+node js based utilities for sending command and returning parsed result.
 
 # APIs
 

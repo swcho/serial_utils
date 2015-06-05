@@ -139,11 +139,45 @@ function install_apk(aPath, aCb) {
     });
 }
 exports.install_apk = install_apk;
-function run_test(aPackageName, aRunner, aCb) {
+(function (TTestType) {
+    TTestType[TTestType["ENone"] = 3] = "ENone";
+    TTestType[TTestType["EStarted"] = 1] = "EStarted";
+    TTestType[TTestType["EPass"] = 0] = "EPass";
+    TTestType[TTestType["EFail"] = -1] = "EFail";
+    TTestType[TTestType["EError"] = -2] = "EError";
+})(exports.TTestType || (exports.TTestType = {}));
+var TTestType = exports.TTestType;
+// ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
+function run_test(aPackageName, aRunner, aEventCb, aCb) {
+    var re_status = /INSTRUMENTATION_STATUS: (.*)=(.*)/;
+    var parser_map = {
+        'numtests': function (str) {
+            return parseInt(str, 10);
+        },
+        'current': function (str) {
+            return parseInt(str, 10);
+        }
+    };
+    var re_code = /INSTRUMENTATION_STATUS_CODE: (.*)/;
+    var event = {};
     serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function (line) {
-        console.log(line);
+        //console.log(line);
+        var match_status = re_status.exec(line);
+        if (match_status) {
+            var key = match_status[1];
+            var value = match_status[2];
+            event[key] = parser_map[key] ? parser_map[key](value) : value;
+        }
+        else {
+            var match_code = re_code.exec(line);
+            if (match_code) {
+                event['type'] = parseInt(match_code[1], 10);
+                aEventCb(event);
+                event = {};
+            }
+        }
     }, function (errLine) {
-        console.log(errLine);
+        console.log('ERR: ' + errLine);
     }, function (exitCode) {
         aCb(exitCode);
     });

@@ -170,11 +170,60 @@ export function install_apk(aPath: string, aCb: (err: any) => void) {
     });
 }
 
-export function run_test(aPackageName: string, aRunner: string, aCb: (err: any) => void) {
+export enum TTestType {
+    ENone = 3,
+    EStarted = 1,
+    EPass = 0,
+    EFail = -1,
+    EError = -2
+}
+
+export interface TTestEvent {
+    type: TTestType;
+    id: string;
+    clazz: string;
+    stream: string;
+    test: string;
+    current: number;
+    numtests: number;
+}
+
+// ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
+export function run_test(aPackageName: string, aRunner: string, aEventCb: (event: TTestEvent) => void, aCb: (err: any) => void) {
+
+    var re_status = /INSTRUMENTATION_STATUS: (.*)=(.*)/;
+    var parser_map = {
+        'numtests': function(str: string) {
+            return parseInt(str, 10);
+        },
+        'current': function(str: string) {
+            return parseInt(str, 10);
+        }
+    };
+    var re_code = /INSTRUMENTATION_STATUS_CODE: (.*)/;
+
+    var event: any = {};
+
     serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function(line) {
-        console.log(line);
+
+        //console.log(line);
+
+        var match_status = re_status.exec(line);
+        if (match_status) {
+            var key = match_status[1];
+            var value = match_status[2];
+            event[key] = parser_map[key] ? parser_map[key](value) : value;
+        } else {
+            var match_code = re_code.exec(line);
+            if (match_code) {
+                event['type'] = parseInt(match_code[1], 10);
+                aEventCb(event);
+                event = {};
+            }
+        }
+
     }, function(errLine) {
-        console.log(errLine);
+        console.log('ERR: ' + errLine);
     }, function(exitCode) {
         aCb(exitCode);
     });
