@@ -1,6 +1,8 @@
 
 /// <reference path='typings/tsd.d.ts' />
 
+import fs = require('fs');
+
 var serial_commander = require('serial_commander');
 import libxmljs = require('libxmljs');
 
@@ -284,13 +286,28 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
     });
 }
 
+export function get_file(aPathSource: string, aPathTarget: string, aCb: (err: any) => void) {
+    var base64string = '';
+    serial_commander.run_command('cat ' + aPathSource + ' | base64', function(line) {
+        base64string += line;
+    }, function(errLine) {
+        console.error(errLine);
+    }, function(exitCode) {
+        var buf = new Buffer(base64string, 'base64');
+        fs.writeFile(aPathTarget, buf, function(err) {
+            aCb(err);
+        });
+    });
+}
+
 export function template(aPath: string, aCb: (err: any) => void) {
     serial_commander.run_command('ll ' + aPath, function(line) {
         console.log(line);
     }, function(errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function(exitCode) {
         console.log('finished: ', exitCode);
         aCb(exitCode);
     });
 }
+
