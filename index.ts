@@ -3,8 +3,11 @@
 
 import fs = require('fs');
 
-var serial_commander = require('serial_commander');
 import libxmljs = require('libxmljs');
+import async = require('async');
+
+var serial_commander = require('serial_commander');
+
 
 export function init(cb) {
     serial_commander.init('/dev/ttyS0', function() {
@@ -194,96 +197,135 @@ export interface TTestEvent {
 // ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
 export function run_test(aPackageName: string, aRunner: string, aEventCb: (event: TTestEvent) => void, aCb: (err: any, junit_xml: libxmljs.XMLDocument) => void) {
 
-    var re_status = /INSTRUMENTATION_STATUS: (.*)=(.*)/;
-    var parser_map = {
-        'numtests': function(str: string) {
-            return parseInt(str, 10);
-        },
-        'current': function(str: string) {
-            return parseInt(str, 10);
-        }
-    };
-    var re_code = /INSTRUMENTATION_STATUS_CODE: (.*)/;
-
-    var event: any = {};
+    var series = [];
 
     var doc = new libxmljs.Document(1, 'utf-8');
-    var elTestSuit = doc.node('testsuits', null).node('testsuite', null);
+    var logcat_file_name = 'logcat.' + aPackageName + '.txt';
+    var logcat_path = '/sdcard/' + logcat_file_name;
 
-    // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
-    // am instrument -e reportFile my-report.xml -r -w
+    series.push(function(done) {
+        serial_commander.run_command('logcat -c', function() {
 
-    var time_start = (new Date()).getTime();
-    var cnt_total = 0;
-    var cnt_errors = 0;
-    var cnt_failures = 0;
-    var cnt_skipped = 0;
-
-    var time_case_start;
-
-    // am instrument -e log true -e package com.lookout -e notAnnotation com.lookout.annotations.ExcludeFromDefault -r -w com.android.cts.bluetooth/android.test.InstrumentationCtsTestRunner
-    // nohup logcat &
-
-    serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function(line) {
-
-        //console.log(line);
-
-        var code_handlers = {};
-        code_handlers[TTestType.ENone] = function() {
-
-        };
-        code_handlers[TTestType.EStarted] = function() {
-            cnt_total++;
-            time_case_start = (new Date()).getTime();
-        };
-        code_handlers[TTestType.EPass] = function() {
-        };
-        code_handlers[TTestType.EFail] = function() {
-            cnt_failures++;
-        };
-        code_handlers[TTestType.EError] = function() {
-            cnt_errors++;
-        };
-
-        var match_status = re_status.exec(line);
-        if (match_status) {
-            var key = match_status[1];
-            var value = match_status[2];
-            event[key] = parser_map[key] ? parser_map[key](value) : value;
-        } else {
-            var match_code = re_code.exec(line);
-            if (match_code) {
-                var code = parseInt(match_code[1], 10);
-                event['type'] = code;
-                aEventCb(event);
-                code_handlers[code]();
-
-                if (code !== 1) {
-                    var elTestCase = elTestSuit.node('testcase');
-                    elTestCase.attr({
-                        'classname': event['class'],
-                        'name': event['test'],
-                        'time': (((new Date()).getTime() - time_case_start) / 1000).toString()
-                    });
-                }
-                event = {};
-            }
-        }
-
-    }, function(errLine) {
-        console.log('ERR: ' + errLine);
-    }, function(exitCode) {
-        var time_div = (new Date()).getTime() - time_start;
-        elTestSuit.attr({
-            'name': aPackageName,
-            'errors': '' + cnt_errors,
-            'failures': '' + cnt_failures,
-            'skipped': '' + cnt_skipped,
-            'tests': '' + cnt_total,
-            'time': (time_div / 1000).toString()
+        }, function(errLine) {
+            console.error(errLine);
+        }, function(exitCode) {
+            done(exitCode);
         });
-        aCb(exitCode, doc);
     });
+
+    series.push(function(done) {
+        var re_status = /INSTRUMENTATION_STATUS: (.*)=(.*)/;
+        var parser_map = {
+            'numtests': function(str: string) {
+                return parseInt(str, 10);
+            },
+            'current': function(str: string) {
+                return parseInt(str, 10);
+            }
+        };
+        var re_code = /INSTRUMENTATION_STATUS_CODE: (.*)/;
+
+        var event: any = {};
+
+        var elTestSuit = doc.node('testsuits', null).node('testsuite', null);
+
+        // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
+        // am instrument -e reportFile my-report.xml -r -w
+
+        var time_start = (new Date()).getTime();
+        var cnt_total = 0;
+        var cnt_errors = 0;
+        var cnt_failures = 0;
+        var cnt_skipped = 0;
+
+        var time_case_start;
+
+        // am instrument -e log true -e package com.lookout -e notAnnotation com.lookout.annotations.ExcludeFromDefault -r -w com.android.cts.bluetooth/android.test.InstrumentationCtsTestRunner
+        // nohup logcat &
+
+        serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function(line) {
+
+            //console.log(line);
+
+            var code_handlers = {};
+            code_handlers[TTestType.ENone] = function() {
+
+            };
+            code_handlers[TTestType.EStarted] = function() {
+                cnt_total++;
+                time_case_start = (new Date()).getTime();
+            };
+            code_handlers[TTestType.EPass] = function() {
+            };
+            code_handlers[TTestType.EFail] = function() {
+                cnt_failures++;
+            };
+            code_handlers[TTestType.EError] = function() {
+                cnt_errors++;
+            };
+
+            var match_status = re_status.exec(line);
+            if (match_status) {
+                var key = match_status[1];
+                var value = match_status[2];
+                event[key] = parser_map[key] ? parser_map[key](value) : value;
+            } else {
+                var match_code = re_code.exec(line);
+                if (match_code) {
+                    var code = parseInt(match_code[1], 10);
+                    event['type'] = code;
+                    aEventCb(event);
+                    code_handlers[code]();
+
+                    if (code !== 1) {
+                        var elTestCase = elTestSuit.node('testcase');
+                        elTestCase.attr({
+                            'classname': event['class'],
+                            'name': event['test'],
+                            'time': (((new Date()).getTime() - time_case_start) / 1000).toString()
+                        });
+                    }
+                    event = {};
+                }
+            }
+
+        }, function(errLine) {
+            console.error('ERR: ' + errLine);
+        }, function(exitCode) {
+            var time_div = (new Date()).getTime() - time_start;
+            elTestSuit.attr({
+                'name': aPackageName,
+                'errors': '' + cnt_errors,
+                'failures': '' + cnt_failures,
+                'skipped': '' + cnt_skipped,
+                'tests': '' + cnt_total,
+                'time': (time_div / 1000).toString()
+            });
+            done(exitCode);
+        });
+    });
+
+    series.push(function(done) {
+        // ref: http://www.dreamy.pe.kr/zbxe/CodeClip/142826
+        serial_commander.run_command('logcat -d -f ' + logcat_path, function() {
+
+        }, function(errLine) {
+            console.error(errLine);
+        }, function(exitCode) {
+            done(exitCode);
+        });
+    });
+
+    series.push(function(done) {
+        get_file(logcat_path, logcat_file_name, function(err) {
+            done(err);
+        });
+    });
+
+    async.series(series, function(err) {
+        aCb(err, doc);
+    });
+
 }
 
 export function get_file(aPathSource: string, aPathTarget: string, aCb: (err: any) => void) {
