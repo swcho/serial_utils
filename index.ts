@@ -210,9 +210,38 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
 
     // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
     // am instrument -e reportFile my-report.xml -r -w
+
+    var time_start = (new Date()).getTime();
+    var cnt_total = 0;
+    var cnt_errors = 0;
+    var cnt_failures = 0;
+    var cnt_skipped = 0;
+
+    var time_case_start;
+
+    // am instrument -e log true -e package com.lookout -e notAnnotation com.lookout.annotations.ExcludeFromDefault -r -w com.android.cts.bluetooth/android.test.InstrumentationCtsTestRunner
+    // nohup logcat &
+
     serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function(line) {
 
         //console.log(line);
+
+        var code_handlers = {};
+        code_handlers[TTestType.ENone] = function() {
+
+        };
+        code_handlers[TTestType.EStarted] = function() {
+            cnt_total++;
+            time_case_start = (new Date()).getTime();
+        };
+        code_handlers[TTestType.EPass] = function() {
+        };
+        code_handlers[TTestType.EFail] = function() {
+            cnt_failures++;
+        };
+        code_handlers[TTestType.EError] = function() {
+            cnt_errors++;
+        };
 
         var match_status = re_status.exec(line);
         if (match_status) {
@@ -225,11 +254,14 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
                 var code = parseInt(match_code[1], 10);
                 event['type'] = code;
                 aEventCb(event);
-                if (code !== -1) {
+                code_handlers[code]();
+
+                if (code !== 1) {
                     var elTestCase = elTestSuit.node('testcase');
                     elTestCase.attr({
                         'classname': event['class'],
                         'name': event['test'],
+                        'time': (((new Date()).getTime() - time_case_start) / 1000).toString()
                     });
                 }
                 event = {};
@@ -239,6 +271,15 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
     }, function(errLine) {
         console.log('ERR: ' + errLine);
     }, function(exitCode) {
+        var time_div = (new Date()).getTime() - time_start;
+        elTestSuit.attr({
+            'name': aPackageName,
+            'errors': '' + cnt_errors,
+            'failures': '' + cnt_failures,
+            'skipped': '' + cnt_skipped,
+            'tests': '' + cnt_total,
+            'time': (time_div / 1000).toString()
+        });
         aCb(exitCode, doc);
     });
 }
