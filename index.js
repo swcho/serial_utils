@@ -1,5 +1,6 @@
 /// <reference path='typings/tsd.d.ts' />
 var fs = require('fs');
+var path = require('path');
 var libxmljs = require('libxmljs');
 var async = require('async');
 var serial_commander = require('serial_commander');
@@ -31,9 +32,10 @@ function list(aPath, aCb) {
     var re_file = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
     var file_info_list = [];
     serial_commander.run_command('ll ' + aPath, function (line) {
+        var base_dir = path.dirname(aPath);
         var is_dir;
         var filename;
-        var path;
+        var base_path;
         var full_path;
         var size;
         var time;
@@ -47,8 +49,8 @@ function list(aPath, aCb) {
             if (match) {
                 is_dir = true;
                 filename = match[6];
-                path = aPath;
-                full_path = path + '/' + filename;
+                base_path = base_dir;
+                full_path = base_path + '/' + filename;
                 size = 0;
                 time = to_time(match[4], match[5]);
             }
@@ -58,8 +60,8 @@ function list(aPath, aCb) {
             if (match) {
                 is_dir = false;
                 filename = match[7];
-                path = aPath;
-                full_path = path + '/' + filename;
+                base_path = base_dir;
+                full_path = base_path + '/' + filename;
                 size = parseInt(match[4]);
                 time = to_time(match[5], match[6]);
             }
@@ -68,14 +70,14 @@ function list(aPath, aCb) {
             file_info_list.push({
                 is_dir: is_dir,
                 filename: filename,
-                path: path,
+                path: base_path,
                 full_path: full_path,
                 size: size,
                 time: time
             });
         }
     }, function (errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function (err) {
         aCb(err, file_info_list);
     });
@@ -127,7 +129,7 @@ function pm_list_instrumentation(aCb) {
             });
         }
     }, function (errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function (exitCode) {
         aCb(exitCode, result);
     });
@@ -136,7 +138,7 @@ exports.pm_list_instrumentation = pm_list_instrumentation;
 function install_apk(aPath, aCb) {
     serial_commander.run_command('pm install ' + aPath, function (line) {
     }, function (errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function (exitCode) {
         aCb(exitCode);
     });
@@ -151,7 +153,7 @@ exports.install_apk = install_apk;
 })(exports.TTestType || (exports.TTestType = {}));
 var TTestType = exports.TTestType;
 // ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
-function run_test(aPackageName, aRunner, aEventCb, aCb) {
+function run_test(aPackageName, aRunner, aGetLogCatLog, aEventCb, aCb) {
     var series = [];
     var doc = new libxmljs.Document(1, 'utf-8');
     var logcat_file_name = 'logcat.' + aPackageName + '.txt';
@@ -243,20 +245,22 @@ function run_test(aPackageName, aRunner, aEventCb, aCb) {
             done(exitCode);
         });
     });
-    series.push(function (done) {
-        // ref: http://www.dreamy.pe.kr/zbxe/CodeClip/142826
-        serial_commander.run_command('logcat -d -f ' + logcat_path, function () {
-        }, function (errLine) {
-            console.error(errLine);
-        }, function (exitCode) {
-            done(exitCode);
+    if (aGetLogCatLog) {
+        series.push(function (done) {
+            // ref: http://www.dreamy.pe.kr/zbxe/CodeClip/142826
+            serial_commander.run_command('logcat -d -f ' + logcat_path, function () {
+            }, function (errLine) {
+                console.error(errLine);
+            }, function (exitCode) {
+                done(exitCode);
+            });
         });
-    });
-    series.push(function (done) {
-        get_file(logcat_path, logcat_file_name, function (err) {
-            done(err);
+        series.push(function (done) {
+            get_file(logcat_path, logcat_file_name, function (err) {
+                done(err);
+            });
         });
-    });
+    }
     async.series(series, function (err) {
         aCb(err, doc);
     });
@@ -276,6 +280,32 @@ function get_file(aPathSource, aPathTarget, aCb) {
     });
 }
 exports.get_file = get_file;
+function get_files(aPathSourceList, aPathTarget, aCb) {
+    var s = [];
+    var i, len = aPathSourceList.length, source, target;
+    var target_list = [];
+    for (i = 0; i < len; i++) {
+        source = aPathSourceList[i];
+        target = aPathTarget + '/' + path.basename(source);
+        if (!fs.existsSync(target)) {
+            s.push(function (source, target) {
+                return function (done) {
+                    get_file(source, target, done);
+                };
+            }(source, target));
+        }
+        target_list.push(target);
+    }
+    async.series(s, function (err) {
+        if (err) {
+            aCb(err, null);
+        }
+        else {
+            aCb(err, target_list);
+        }
+    });
+}
+exports.get_files = get_files;
 function template(aPath, aCb) {
     serial_commander.run_command('ll ' + aPath, function (line) {
         console.log(line);
@@ -287,4 +317,129 @@ function template(aPath, aCb) {
     });
 }
 exports.template = template;
+function install_and_run(aTestCaseDir, aTestCases, aCbEvent, aCb) {
+    var series = [];
+    var max = aTestCases.length;
+    series.push(function (done) {
+        install_apk(aTestCaseDir + '/CtsTestStubs.apk', done);
+    });
+    aTestCases.forEach(function (info) {
+        series.push((function (info) {
+            return function (done) {
+                install_apk(aTestCaseDir + '/' + info.name + '.apk', done);
+            };
+        })(info));
+    });
+    var docs = [];
+    aTestCases.forEach(function (info, i) {
+        series.push((function (info, i) {
+            return function (done) {
+                run_test(info.appNameSpace, info.runner, false, function (event) {
+                    aCbEvent(i, max, event);
+                }, function (err, result) {
+                    docs.push(result);
+                    //console.log(result.toString());
+                    done(err);
+                });
+            };
+        })(info, i));
+    });
+    async.series(series, function (err) {
+        var doc = new libxmljs.Document(1, 'utf-8');
+        var elTestSuites = doc.node('testsuits', null);
+        docs.forEach(function (d) {
+            var testsuit = d.get('/testsuits/testsuit');
+            elTestSuites.addChild(testsuit);
+        });
+        aCb(err, doc);
+    });
+}
+function run_test_plan(aPath, aCbEvent, aCb) {
+    var series = [];
+    var target_path = 'temp';
+    var dir_test_cases = path.dirname(aPath) + '/../test_cases';
+    if (!fs.existsSync(target_path)) {
+        fs.mkdirSync(target_path);
+    }
+    var local_test_plan_xml = target_path + '/' + path.basename(aPath);
+    //console.log(local_test_plan_xml);
+    if (!fs.existsSync(local_test_plan_xml)) {
+        series.push(function (done) {
+            get_file(aPath, local_test_plan_xml, done);
+        });
+    }
+    var test_case_xml_list = [];
+    series.push(function (done) {
+        var dir = dir_test_cases + '/*.xml';
+        list(dir, function (err, file_list) {
+            file_list.forEach(function (info) {
+                test_case_xml_list.push(info.full_path);
+            });
+            done(err);
+        });
+    });
+    var local_test_case_xml_list;
+    series.push(function (done) {
+        get_files(test_case_xml_list, target_path, function (err, file_list) {
+            local_test_case_xml_list = file_list;
+            done(err);
+        });
+    });
+    var test_cases_to_run = [];
+    series.push(function (done) {
+        var test_case_info_map = {};
+        local_test_case_xml_list.forEach(function (f) {
+            try {
+                var doc = libxmljs.parseXmlString(fs.readFileSync(f).toString());
+                var elTestPackage = doc.get('/TestPackage');
+                var atName = elTestPackage.attr('name');
+                var atAppNameSpace = elTestPackage.attr('appNameSpace');
+                var atAppPackageName = elTestPackage.attr('appPackageName');
+                var atRunner = elTestPackage.attr('runner');
+                if (atName && atAppNameSpace && atAppPackageName && atRunner) {
+                    test_case_info_map[atAppPackageName.value()] = {
+                        name: atName.value(),
+                        appNameSpace: atAppNameSpace.value(),
+                        appPackageName: atAppPackageName.value(),
+                        runner: atRunner.value()
+                    };
+                }
+                else {
+                    console.error(f, 'invalid format');
+                }
+            }
+            catch (e) {
+                console.error(f, 'parsing error');
+                console.error(e);
+            }
+        });
+        var plan = libxmljs.parseXmlString(fs.readFileSync(local_test_plan_xml).toString());
+        var entries = plan.find('/TestPlan/Entry');
+        entries.forEach(function (el) {
+            var atUri = el.attr('uri');
+            if (atUri) {
+                var info = test_case_info_map[atUri.value()];
+                if (info) {
+                    test_cases_to_run.push(info);
+                }
+                else {
+                    console.error(atUri.value(), 'not found!');
+                }
+            }
+        });
+        done();
+    });
+    var result;
+    series.push(function (done) {
+        install_and_run(dir_test_cases, test_cases_to_run, function (no, max, event) {
+            aCbEvent(no, max, event);
+        }, function (err, r) {
+            result = r;
+        });
+    });
+    async.series(series, function (err) {
+        aCb(err, result);
+    });
+}
+exports.run_test_plan = run_test_plan;
 //# sourceMappingURL=index.js.map

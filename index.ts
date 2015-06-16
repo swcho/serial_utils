@@ -2,6 +2,7 @@
 /// <reference path='typings/tsd.d.ts' />
 
 import fs = require('fs');
+import path = require('path')
 
 import libxmljs = require('libxmljs');
 import async = require('async');
@@ -47,9 +48,12 @@ export function list(aPath: string, aCb: (err: any, file_info_list: TFileInfo[])
 
     var file_info_list: TFileInfo[] = [];
     serial_commander.run_command('ll ' + aPath, function(line) {
+
+        var base_dir = path.dirname(aPath);
+
         var is_dir: boolean;
         var filename: string;
-        var path: string;
+        var base_path: string;
         var full_path: string;
         var size: number;
         var time: Date;
@@ -70,8 +74,8 @@ export function list(aPath: string, aCb: (err: any, file_info_list: TFileInfo[])
             if (match) {
                 is_dir = true;
                 filename = match[6];
-                path = aPath;
-                full_path = path + '/' + filename;
+                base_path = base_dir;
+                full_path = base_path + '/' + filename;
                 size = 0;
                 time = to_time(match[4], match[5]);
             }
@@ -80,8 +84,8 @@ export function list(aPath: string, aCb: (err: any, file_info_list: TFileInfo[])
             if (match) {
                 is_dir = false;
                 filename = match[7];
-                path = aPath;
-                full_path = path + '/' + filename;
+                base_path = base_dir;
+                full_path = base_path + '/' + filename;
                 size = parseInt(match[4]);
                 time = to_time(match[5], match[6]);
             }
@@ -91,14 +95,14 @@ export function list(aPath: string, aCb: (err: any, file_info_list: TFileInfo[])
             file_info_list.push({
                 is_dir: is_dir,
                 filename: filename,
-                path: path,
+                path: base_path,
                 full_path: full_path,
                 size: size,
                 time: time
             });
         }
     }, function(errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function(err) {
         aCb(err, file_info_list);
     });
@@ -161,7 +165,7 @@ export function pm_list_instrumentation(aCb: (err: any, instrumentation_info_lis
             });
         }
     }, function(errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function(exitCode) {
         aCb(exitCode, result);
     });
@@ -170,7 +174,7 @@ export function pm_list_instrumentation(aCb: (err: any, instrumentation_info_lis
 export function install_apk(aPath: string, aCb: (err: any) => void) {
     serial_commander.run_command('pm install ' + aPath, function(line) {
     }, function(errLine) {
-        console.log(errLine);
+        console.error(errLine);
     }, function(exitCode) {
         aCb(exitCode);
     });
@@ -195,7 +199,7 @@ export interface TTestEvent {
 }
 
 // ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
-export function run_test(aPackageName: string, aRunner: string, aEventCb: (event: TTestEvent) => void, aCb: (err: any, junit_xml: libxmljs.XMLDocument) => void) {
+export function run_test(aPackageName: string, aRunner: string, aGetLogCatLog: boolean, aEventCb: (event: TTestEvent) => void, aCb: (err: any, junit_xml: libxmljs.XMLDocument) => void) {
 
     var series = [];
 
@@ -305,30 +309,32 @@ export function run_test(aPackageName: string, aRunner: string, aEventCb: (event
         });
     });
 
-    series.push(function(done) {
-        // ref: http://www.dreamy.pe.kr/zbxe/CodeClip/142826
-        serial_commander.run_command('logcat -d -f ' + logcat_path, function() {
+    if (aGetLogCatLog) {
+        series.push(function(done) {
+            // ref: http://www.dreamy.pe.kr/zbxe/CodeClip/142826
+            serial_commander.run_command('logcat -d -f ' + logcat_path, function() {
 
-        }, function(errLine) {
-            console.error(errLine);
-        }, function(exitCode) {
-            done(exitCode);
+            }, function(errLine) {
+                console.error(errLine);
+            }, function(exitCode) {
+                done(exitCode);
+            });
         });
-    });
 
-    series.push(function(done) {
-        get_file(logcat_path, logcat_file_name, function(err) {
-            done(err);
+        series.push(function(done) {
+            get_file(logcat_path, logcat_file_name, function(err) {
+                done(err);
+            });
         });
-    });
+    }
 
     async.series(series, function(err) {
         aCb(err, doc);
     });
-
 }
 
 export function get_file(aPathSource: string, aPathTarget: string, aCb: (err: any) => void) {
+
     var base64string = '';
     serial_commander.run_command('cat ' + aPathSource + ' | base64', function(line) {
         base64string += line;
@@ -339,6 +345,32 @@ export function get_file(aPathSource: string, aPathTarget: string, aCb: (err: an
         fs.writeFile(aPathTarget, buf, function(err) {
             aCb(err);
         });
+    });
+}
+
+export function get_files(aPathSourceList: string[], aPathTarget: string, aCb: (err: any, file_list: string[]) => void) {
+    var s = [];
+    var i, len = aPathSourceList.length, source, target;
+    var target_list = [];
+    for (i=0; i<len; i++) {
+        source = aPathSourceList[i];
+        target = aPathTarget + '/' + path.basename(source);
+        if (!fs.existsSync(target)) {
+            s.push(function(source, target) {
+                return function(done) {
+                    get_file(source, target, done);
+                }
+            }(source, target));
+        }
+        target_list.push(target);
+    }
+
+    async.series(s, function(err) {
+        if (err) {
+            aCb(err, null);
+        } else {
+            aCb(err, target_list)
+        }
     });
 }
 
@@ -353,3 +385,151 @@ export function template(aPath: string, aCb: (err: any) => void) {
     });
 }
 
+interface TTestCaseInfo {
+    name: string;
+    appNameSpace: string;
+    appPackageName: string;
+    runner: string;
+}
+
+function install_and_run(aTestCaseDir: string, aTestCases: TTestCaseInfo[],
+                         aCbEvent: (no: number, max: number, evt: TTestEvent) => void,
+                         aCb: (err: any, junit_xml: libxmljs.XMLDocument) => void) {
+
+    var series = [];
+    var max = aTestCases.length;
+
+    series.push(function(done) {
+        install_apk(aTestCaseDir + '/CtsTestStubs.apk', done);
+    });
+
+    aTestCases.forEach(function(info) {
+        series.push((function(info) {
+            return function(done) {
+                install_apk(aTestCaseDir + '/' + info.name + '.apk', done)
+            };
+        })(info));
+    });
+
+    var docs = [];
+    aTestCases.forEach(function(info, i) {
+        series.push((function(info, i) {
+            return function(done) {
+                run_test(info.appNameSpace, info.runner, false, function(event) {
+                    aCbEvent(i, max, event);
+                }, function(err, result) {
+                    docs.push(result);
+                    //console.log(result.toString());
+                    done(err);
+                });
+            };
+        })(info, i));
+    });
+
+    async.series(series, function(err) {
+        var doc = new libxmljs.Document(1, 'utf-8');
+        var elTestSuites = doc.node('testsuits', null);
+        docs.forEach(function(d) {
+            var testsuit = d.get('/testsuits/testsuit');
+            elTestSuites.addChild(testsuit);
+        });
+        aCb(err, doc);
+    });
+}
+
+export function run_test_plan(aPath: string,
+                              aCbEvent: (no: number, max: number, evt: TTestEvent) => void,
+                              aCb: (err: any, junit_xml: libxmljs.XMLDocument) => void) {
+
+    var series = [];
+    var target_path = 'temp';
+    var dir_test_cases = path.dirname(aPath) + '/../test_cases';
+
+    if (!fs.existsSync(target_path)) {
+        fs.mkdirSync(target_path);
+    }
+
+    var local_test_plan_xml = target_path + '/' + path.basename(aPath);
+    //console.log(local_test_plan_xml);
+    if (!fs.existsSync(local_test_plan_xml)) {
+        series.push(function(done) {
+            get_file(aPath, local_test_plan_xml, done);
+        });
+    }
+
+    var test_case_xml_list = [];
+    series.push(function(done) {
+        var dir = dir_test_cases + '/*.xml';
+        list(dir, function(err, file_list) {
+            file_list.forEach(function(info) {
+                test_case_xml_list.push(info.full_path);
+            });
+            done(err);
+        });
+    });
+
+    var local_test_case_xml_list;
+    series.push(function(done) {
+        get_files(test_case_xml_list, target_path, function(err, file_list) {
+            local_test_case_xml_list = file_list;
+            done(err);
+        });
+    });
+
+    var test_cases_to_run: TTestCaseInfo[] = [];
+    series.push(function(done) {
+        var test_case_info_map = {};
+        local_test_case_xml_list.forEach(function(f) {
+            try {
+                var doc = libxmljs.parseXmlString(fs.readFileSync(f).toString());
+                var elTestPackage = doc.get('/TestPackage');
+                var atName = elTestPackage.attr('name');
+                var atAppNameSpace = elTestPackage.attr('appNameSpace');
+                var atAppPackageName = elTestPackage.attr('appPackageName');
+                var atRunner = elTestPackage.attr('runner');
+                if (atName && atAppNameSpace && atAppPackageName && atRunner) {
+                    test_case_info_map[atAppPackageName.value()] = {
+                        name: atName.value(),
+                        appNameSpace: atAppNameSpace.value(),
+                        appPackageName: atAppPackageName.value(),
+                        runner: atRunner.value()
+                    };
+                } else {
+                    console.error(f, 'invalid format');
+                }
+            } catch(e) {
+                console.error(f, 'parsing error');
+                console.error(e);
+            }
+        });
+
+        var plan = libxmljs.parseXmlString(fs.readFileSync(local_test_plan_xml).toString());
+        var entries = plan.find('/TestPlan/Entry');
+        entries.forEach(function(el) {
+            var atUri = el.attr('uri');
+            if (atUri) {
+                var info = test_case_info_map[atUri.value()];
+                if (info) {
+                    test_cases_to_run.push(info);
+                } else {
+                    console.error(atUri.value(), 'not found!');
+                }
+            }
+        });
+        done();
+    });
+
+    var result;
+    series.push(function(done) {
+        install_and_run(dir_test_cases, test_cases_to_run, function(no, max, event){
+            aCbEvent(no, max, event);
+        }, function(err, r) {
+            result = r;
+        });
+    });
+
+    async.series(series, function(err) {
+        aCb(err, result);
+    });
+
+}

@@ -8,9 +8,16 @@ async.series([
             done(null, null);
         });
     },
+    //function(done) {
+    //    console.log('TEST: list');
+    //    api.list('/storage/external_storage/sda1/test_cases', function(err, list) {
+    //        console.log(list);
+    //        done(err, null);
+    //    });
+    //},
     function (done) {
         console.log('TEST: list');
-        api.list('/storage/external_storage/sda1/test_cases', function (err, list) {
+        api.list('/storage/external_storage/sda1/test_plans', function (err, list) {
             console.log(list);
             done(err, null);
         });
@@ -49,16 +56,28 @@ async.series([
     //        done(null, null);
     //    });
     //},
+    //function(done) {
+    //    console.log('TEST: run test');
+    //    api.run_test('com.android.cts.bluetooth', 'android.test.InstrumentationCtsTestRunner',
+    //        function(event) {
+    //            console.log(event);
+    //        },
+    //        function(err, doc) {
+    //            console.log('RESULT: ' + err);
+    //            console.log(doc.toString());
+    //            done(null, null);
+    //        }
+    //    );
+    //},
     function (done) {
-        console.log('TEST: run test');
-        api.run_test('com.android.cts.bluetooth', 'android.test.InstrumentationCtsTestRunner', function (event) {
-            console.log(event);
-        }, function (err, doc) {
-            console.log('RESULT: ' + err);
-            console.log(doc.toString());
-            done(null, null);
+        console.log('TEST: run test plan');
+        api.run_test_plan('/storage/external_storage/sda1/test_plans/CTS-min.xml', function (no, max, event) {
+            console.log('TEST: ', no, max, event);
+        }, function (err, xml) {
+            console.log(err);
+            console.log(xml.toString());
         });
-    },
+    }
 ], function (err) {
     if (err) {
         console.log('err: ' + err);
