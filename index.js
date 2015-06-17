@@ -155,7 +155,7 @@ var TTestType = exports.TTestType;
 // ref: http://comments.gmane.org/gmane.comp.handhelds.android.devel/116034
 function run_test(aPackageName, aRunner, aGetLogCatLog, aEventCb, aCb) {
     var series = [];
-    var doc = new libxmljs.Document(1, 'utf-8');
+    var doc = new libxmljs.Document();
     var logcat_file_name = 'logcat.' + aPackageName + '.txt';
     var logcat_path = '/sdcard/' + logcat_file_name;
     series.push(function (done) {
@@ -178,7 +178,7 @@ function run_test(aPackageName, aRunner, aGetLogCatLog, aEventCb, aCb) {
         };
         var re_code = /INSTRUMENTATION_STATUS_CODE: (.*)/;
         var event = {};
-        var elTestSuit = doc.node('testsuits', null).node('testsuite', null);
+        var elTestSuit = doc.node('testsuites', null).node('testsuite', null);
         // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
         // am instrument -e reportFile my-report.xml -r -w
         var time_start = (new Date()).getTime();
@@ -191,6 +191,7 @@ function run_test(aPackageName, aRunner, aGetLogCatLog, aEventCb, aCb) {
         // nohup logcat &
         serial_commander.run_command('am instrument -r -w ' + aPackageName + '/' + aRunner, function (line) {
             //console.log(line);
+            var el;
             var code_handlers = {};
             code_handlers[3 /* ENone */] = function () {
             };
@@ -201,9 +202,11 @@ function run_test(aPackageName, aRunner, aGetLogCatLog, aEventCb, aCb) {
             code_handlers[0 /* EPass */] = function () {
             };
             code_handlers[-1 /* EFail */] = function () {
+                el = new libxmljs.Element(doc, 'failure');
                 cnt_failures++;
             };
             code_handlers[-2 /* EError */] = function () {
+                el = new libxmljs.Element(doc, 'error');
                 cnt_errors++;
             };
             var match_status = re_status.exec(line);
@@ -226,6 +229,9 @@ function run_test(aPackageName, aRunner, aGetLogCatLog, aEventCb, aCb) {
                             'name': event['test'],
                             'time': (((new Date()).getTime() - time_case_start) / 1000).toString()
                         });
+                        if (el) {
+                            elTestCase.addChild(el);
+                        }
                     }
                     event = {};
                 }
@@ -345,11 +351,14 @@ function install_and_run(aTestCaseDir, aTestCases, aCbEvent, aCb) {
         })(info, i));
     });
     async.series(series, function (err) {
-        var doc = new libxmljs.Document(1, 'utf-8');
-        var elTestSuites = doc.node('testsuits', null);
+        var doc = new libxmljs.Document();
+        var elTestSuites = doc.node('testsuites', null);
         docs.forEach(function (d) {
-            var testsuit = d.get('/testsuits/testsuit');
-            elTestSuites.addChild(testsuit);
+            //console.log(d.toString());
+            var testsuit = d.get('/testsuites/testsuite');
+            if (testsuit) {
+                elTestSuites.addChild(testsuit);
+            }
         });
         aCb(err, doc);
     });
@@ -435,6 +444,7 @@ function run_test_plan(aPath, aCbEvent, aCb) {
             aCbEvent(no, max, event);
         }, function (err, r) {
             result = r;
+            done();
         });
     });
     async.series(series, function (err) {

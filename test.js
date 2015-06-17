@@ -1,6 +1,7 @@
 /// <reference path='typings/tsd.d.ts' />
 var async = require('async');
 var api = require('./index');
+var fs = require('fs');
 async.series([
     function (done) {
         console.log('TEST: init');
@@ -74,8 +75,8 @@ async.series([
         api.run_test_plan('/storage/external_storage/sda1/test_plans/CTS-min.xml', function (no, max, event) {
             console.log('TEST: ', no, max, event);
         }, function (err, xml) {
-            console.log(err);
-            console.log(xml.toString());
+            fs.writeFileSync('test_result.xml', xml.toString());
+            done(err, null);
         });
     }
 ], function (err) {

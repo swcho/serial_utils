@@ -9,7 +9,7 @@ declare module "libxmljs" {
  
  
     export class XMLDocument {
-        constructor(version:number, encoding:string);
+        constructor(version?:number, encoding?:string);
         child(idx:number):Element;
         childNodes():Element[];
         errors():SyntaxError[];

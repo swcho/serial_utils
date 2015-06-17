@@ -203,7 +203,7 @@ export function run_test(aPackageName: string, aRunner: string, aGetLogCatLog: b
 
     var series = [];
 
-    var doc = new libxmljs.Document(1, 'utf-8');
+    var doc = new libxmljs.Document();
     var logcat_file_name = 'logcat.' + aPackageName + '.txt';
     var logcat_path = '/sdcard/' + logcat_file_name;
 
@@ -231,7 +231,7 @@ export function run_test(aPackageName: string, aRunner: string, aGetLogCatLog: b
 
         var event: any = {};
 
-        var elTestSuit = doc.node('testsuits', null).node('testsuite', null);
+        var elTestSuit = doc.node('testsuites', null).node('testsuite', null);
 
         // ref: http://zutubi.com/source/projects/android-junit-report/documentation/
         // am instrument -e reportFile my-report.xml -r -w
@@ -251,6 +251,8 @@ export function run_test(aPackageName: string, aRunner: string, aGetLogCatLog: b
 
             //console.log(line);
 
+            var el;
+
             var code_handlers = {};
             code_handlers[TTestType.ENone] = function() {
 
@@ -262,9 +264,11 @@ export function run_test(aPackageName: string, aRunner: string, aGetLogCatLog: b
             code_handlers[TTestType.EPass] = function() {
             };
             code_handlers[TTestType.EFail] = function() {
+                el = new libxmljs.Element(doc, 'failure');
                 cnt_failures++;
             };
             code_handlers[TTestType.EError] = function() {
+                el = new libxmljs.Element(doc, 'error');
                 cnt_errors++;
             };
 
@@ -288,6 +292,9 @@ export function run_test(aPackageName: string, aRunner: string, aGetLogCatLog: b
                             'name': event['test'],
                             'time': (((new Date()).getTime() - time_case_start) / 1000).toString()
                         });
+                        if (el) {
+                            elTestCase.addChild(el);
+                        }
                     }
                     event = {};
                 }
@@ -427,11 +434,14 @@ function install_and_run(aTestCaseDir: string, aTestCases: TTestCaseInfo[],
     });
 
     async.series(series, function(err) {
-        var doc = new libxmljs.Document(1, 'utf-8');
-        var elTestSuites = doc.node('testsuits', null);
+        var doc = new libxmljs.Document();
+        var elTestSuites = doc.node('testsuites', null);
         docs.forEach(function(d) {
-            var testsuit = d.get('/testsuits/testsuit');
-            elTestSuites.addChild(testsuit);
+            //console.log(d.toString());
+            var testsuit = d.get('/testsuites/testsuite');
+            if (testsuit) {
+                elTestSuites.addChild(testsuit);
+            }
         });
         aCb(err, doc);
     });
@@ -525,6 +535,7 @@ export function run_test_plan(aPath: string,
             aCbEvent(no, max, event);
         }, function(err, r) {
             result = r;
+            done();
         });
     });
 
