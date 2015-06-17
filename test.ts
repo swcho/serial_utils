@@ -19,23 +19,23 @@ async.series<any>([
     //        done(err, null);
     //    });
     //},
-    function(done) {
-        console.log('TEST: list');
-        api.list('/storage/external_storage/sda1/test_plans', function(err, list) {
-            console.log(list);
-            done(err, null);
-        });
-    },
-    function(done) {
-        console.log('TEST: list');
-        api.get_file(
-            '/storage/external_storage/sda1/test_cases/CtsMediaTestCases.xml',
-            'CtsMediaTestCases.xml',
-            function(err) {
-                done(err, null);
-            }
-        );
-    },
+    //function(done) {
+    //    console.log('TEST: list');
+    //    api.list('/storage/external_storage/sda1/test_plans', function(err, list) {
+    //        console.log(list);
+    //        done(err, null);
+    //    });
+    //},
+    //function(done) {
+    //    console.log('TEST: list');
+    //    api.get_file(
+    //        '/storage/external_storage/sda1/test_cases/CtsMediaTestCases.xml',
+    //        'CtsMediaTestCases.xml',
+    //        function(err) {
+    //            done(err, null);
+    //        }
+    //    );
+    //},
     //function(done) {
     //    console.log('TEST: list features');
     //    api.pm_list_features(function(err, feature_list) {
@@ -77,12 +77,20 @@ async.series<any>([
     //        }
     //    );
     //},
+    //function(done) {
+    //    console.log('TEST: run test plan');
+    //    api.run_test_plan('/storage/external_storage/sda1/test_plans/CTS-min.xml', function(no, max, event){
+    //        console.log('TEST: ', no, max, event);
+    //    }, function(err, xml) {
+    //        fs.writeFileSync('test_result.xml', xml.toString());
+    //        done(err, null);
+    //    });
+    //}
     function(done) {
         console.log('TEST: run test plan');
-        api.run_test_plan('/storage/external_storage/sda1/test_plans/CTS-min.xml', function(no, max, event){
-            console.log('TEST: ', no, max, event);
-        }, function(err, xml) {
-            fs.writeFileSync('test_result.xml', xml.toString());
+        api.load_test_case_info('CTS-min.xml', 'temp', function(err, list) {
+            console.log(err);
+            console.log(list);
             done(err, null);
         });
     }

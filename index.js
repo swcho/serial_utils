@@ -323,16 +323,16 @@ function template(aPath, aCb) {
     });
 }
 exports.template = template;
-function install_and_run(aTestCaseDir, aTestCases, aCbEvent, aCb) {
+function install_and_run(aTestCasePkgDir, aTestCases, aCbEvent, aCb) {
     var series = [];
     var max = aTestCases.length;
     series.push(function (done) {
-        install_apk(aTestCaseDir + '/CtsTestStubs.apk', done);
+        install_apk(aTestCasePkgDir + '/CtsTestStubs.apk', done);
     });
     aTestCases.forEach(function (info) {
         series.push((function (info) {
             return function (done) {
-                install_apk(aTestCaseDir + '/' + info.name + '.apk', done);
+                install_apk(aTestCasePkgDir + '/' + info.name + '.apk', done);
             };
         })(info));
     });
@@ -363,6 +363,7 @@ function install_and_run(aTestCaseDir, aTestCases, aCbEvent, aCb) {
         aCb(err, doc);
     });
 }
+exports.install_and_run = install_and_run;
 function run_test_plan(aPath, aCbEvent, aCb) {
     var series = [];
     var target_path = 'temp';
@@ -452,4 +453,72 @@ function run_test_plan(aPath, aCbEvent, aCb) {
     });
 }
 exports.run_test_plan = run_test_plan;
+function load_test_case_info(aTestPlanPath, aTestCaseDir, aCb) {
+    var series = [];
+    var test_case_xml_list;
+    series.push(function (done) {
+        fs.readdir(aTestCaseDir, function (err, files) {
+            test_case_xml_list = files;
+            done(err);
+        });
+    });
+    var test_cases_to_run = [];
+    series.push(function (done) {
+        var test_case_info_map = {};
+        test_case_xml_list.forEach(function (f) {
+            f = aTestCaseDir + '/' + f;
+            try {
+                var doc = libxmljs.parseXmlString(fs.readFileSync(f).toString());
+                var elTestPackage = doc.get('/TestPackage');
+                var atName = elTestPackage.attr('name');
+                var atAppNameSpace = elTestPackage.attr('appNameSpace');
+                var atAppPackageName = elTestPackage.attr('appPackageName');
+                var atRunner = elTestPackage.attr('runner');
+                if (!atName) {
+                    console.error(f, 'name attribute missing');
+                }
+                else if (!atAppNameSpace) {
+                    console.error(f, 'appNameSpace attribute missing');
+                }
+                else if (!atAppPackageName) {
+                    console.error(f, 'appPackageName attribute missing');
+                }
+                else if (!atRunner) {
+                    console.error(f, 'runner attribute missing');
+                }
+                else {
+                    test_case_info_map[atAppPackageName.value()] = {
+                        name: atName.value(),
+                        appNameSpace: atAppNameSpace.value(),
+                        appPackageName: atAppPackageName.value(),
+                        runner: atRunner.value()
+                    };
+                }
+            }
+            catch (e) {
+                console.error(f, 'parsing error');
+                console.error(e);
+            }
+        });
+        var plan = libxmljs.parseXmlString(fs.readFileSync(aTestPlanPath).toString());
+        var entries = plan.find('/TestPlan/Entry');
+        entries.forEach(function (el) {
+            var atUri = el.attr('uri');
+            if (atUri) {
+                var info = test_case_info_map[atUri.value()];
+                if (info) {
+                    test_cases_to_run.push(info);
+                }
+                else {
+                    console.error(atUri.value(), 'not found!');
+                }
+            }
+        });
+        done();
+    });
+    async.series(series, function (err) {
+        aCb(err, test_cases_to_run);
+    });
+}
+exports.load_test_case_info = load_test_case_info;
 //# sourceMappingURL=index.js.map
