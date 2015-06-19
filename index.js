@@ -6,7 +6,7 @@ var async = require('async');
 var serial_commander = require('serial_commander');
 function init(cb) {
     serial_commander.init('/dev/ttyS0', function () {
-        cb();
+        cb(serial_commander);
     });
 }
 exports.init = init;
