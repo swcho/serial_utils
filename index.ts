@@ -9,8 +9,8 @@ import async = require('async');
 
 var serial_commander = require('serial_commander');
 
-export function init(cb: (serial_commander) => void) {
-    serial_commander.init('/dev/ttyS0', function() {
+export function init(port, cb: (serial_commander) => void) {
+    serial_commander.init(port, function() {
         cb(serial_commander);
     });
 }

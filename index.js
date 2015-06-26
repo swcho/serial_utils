@@ -4,8 +4,8 @@ var path = require('path');
 var libxmljs = require('libxmljs');
 var async = require('async');
 var serial_commander = require('serial_commander');
-function init(cb) {
-    serial_commander.init('/dev/ttyS0', function () {
+function init(port, cb) {
+    serial_commander.init(port, function () {
         cb(serial_commander);
     });
 }
