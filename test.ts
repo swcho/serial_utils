@@ -8,17 +8,26 @@ import fs = require('fs');
 async.series<any>([
     function(done) {
         console.log('TEST: init');
-        api.init(function() {
+        api.init('/dev/ttyS0', function() {
+            api.set_show_log(true);
+            api.wait_line(/\s*(\w+)\(\s*(\d+)\);E;/, function(match) {
+                console.log(match[1], match[2]);
+            });
             done(null, null);
         });
     },
-    //function(done) {
-    //    console.log('TEST: list');
-    //    api.list('/storage/external_storage/sda1/test_cases', function(err, list) {
-    //        console.log(list);
-    //        done(err, null);
-    //    });
-    //},
+    function(done) {
+        console.log('TEST: list');
+        api.debug_run_command('ls', function(err) {
+            done(err, null);
+        });
+    },
+    function(done) {
+        api.wait_line_once(/Configuring eth0 interface/, function() {
+            console.log('WAIT LINE PASS');
+            done(null, null);
+        });
+    },
     //function(done) {
     //    console.log('TEST: list');
     //    api.list('/storage/external_storage/sda1/test_plans', function(err, list) {
@@ -99,5 +108,5 @@ async.series<any>([
     if (err) {
         console.log('err: ' + err);
     }
-    process.exit();
+    //process.exit();
 });

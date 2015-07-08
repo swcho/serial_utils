@@ -9,10 +9,86 @@ import async = require('async');
 
 var serial_commander = require('serial_commander');
 
+var show_log = false;
+
+interface TReItem {
+    re: RegExp;
+    once: boolean;
+    cb: (match) => void;
+}
+
+var re_list: TReItem[] = [];
+var capturing = false;
+var captured_lines = '';
+
 export function init(port, cb: (serial_commander) => void) {
     serial_commander.init(port, function() {
+
+        serial_commander.on_line(function(line) {
+            if (show_log) {
+                console.log(line);
+            }
+            if (capturing) {
+                captured_lines += line + '\n';
+            }
+            var slice_idx = [];
+            var cbs = [];
+            re_list.forEach(function(item, idx) {
+                var match = item.re.exec(line);
+                if (match) {
+                    if (item.once) {
+                        slice_idx.push(idx);
+                    }
+                    //cbs.push(item.cb);
+                    cbs.push((function(cb, match) {
+                        return function() {
+                            cb(match);
+                        }
+                    }(item.cb, match)))
+                }
+            });
+            while (slice_idx.length) {
+                var idx = slice_idx.pop();
+                re_list.splice(idx);
+            }
+            cbs.forEach(function(cb) {
+                cb();
+            });
+        });
+
         cb(serial_commander);
     });
+}
+
+export function start_capture() {
+    capturing = true;
+    captured_lines = '';
+}
+
+export function stop_capture(filename) {
+    fs.writeFileSync(filename, captured_lines);
+    capturing = false;
+    captured_lines = '';
+}
+
+export function set_show_log(show) {
+    show_log = show;
+}
+
+function _wait_line(pattern: RegExp, once: boolean, cb: (match) => void) {
+    re_list.push({
+        re: pattern,
+        once: once,
+        cb: cb
+    });
+}
+
+export function wait_line(pattern: RegExp, cb: (match) => void) {
+    _wait_line(pattern, false, cb);
+}
+
+export function wait_line_once(pattern: RegExp, cb: (match) => void) {
+    _wait_line(pattern, true, cb);
 }
 
 export interface TFileInfo {
@@ -36,11 +112,6 @@ export function debug_run_command(aCommand, aCb: (err: any) => void) {
     });
 }
 
-/**
- *
- * @param aPath
- * @param aCb
- */
 export function list(aPath: string, aCb: (err: any, file_info_list: TFileInfo[]) => void) {
     var re_dir = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
     var re_file = /(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)/;
