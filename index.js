@@ -45,17 +45,6 @@ function init(port, cb) {
     });
 }
 exports.init = init;
-function start_capture() {
-    capturing = true;
-    captured_lines = '';
-}
-exports.start_capture = start_capture;
-function stop_capture(filename) {
-    fs.writeFileSync(filename, captured_lines);
-    capturing = false;
-    captured_lines = '';
-}
-exports.stop_capture = stop_capture;
 function set_show_log(show) {
     show_log = show;
 }
@@ -75,6 +64,17 @@ function wait_line_once(pattern, cb) {
     _wait_line(pattern, true, cb);
 }
 exports.wait_line_once = wait_line_once;
+function start_capture() {
+    capturing = true;
+    captured_lines = '';
+}
+exports.start_capture = start_capture;
+function stop_capture(filename) {
+    fs.writeFileSync(filename, captured_lines);
+    capturing = false;
+    captured_lines = '';
+}
+exports.stop_capture = stop_capture;
 function debug_run_command(aCommand, aCb) {
     console.log('debug_run_command: ' + aCommand);
     serial_commander.run_command(aCommand, function (line) {

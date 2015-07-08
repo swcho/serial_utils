@@ -60,18 +60,7 @@ export function init(port, cb: (serial_commander) => void) {
     });
 }
 
-export function start_capture() {
-    capturing = true;
-    captured_lines = '';
-}
-
-export function stop_capture(filename) {
-    fs.writeFileSync(filename, captured_lines);
-    capturing = false;
-    captured_lines = '';
-}
-
-export function set_show_log(show) {
+export function set_show_log(show: boolean) {
     show_log = show;
 }
 
@@ -89,6 +78,17 @@ export function wait_line(pattern: RegExp, cb: (match) => void) {
 
 export function wait_line_once(pattern: RegExp, cb: (match) => void) {
     _wait_line(pattern, true, cb);
+}
+
+export function start_capture() {
+    capturing = true;
+    captured_lines = '';
+}
+
+export function stop_capture(filename: string) {
+    fs.writeFileSync(filename, captured_lines);
+    capturing = false;
+    captured_lines = '';
 }
 
 export interface TFileInfo {
